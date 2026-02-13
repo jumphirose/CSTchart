@@ -14,20 +14,20 @@ from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, Univariate
 from scipy.signal import savgol_filter
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
+import matplotlib.pyplot as plt
+import matplotlib.font_manager as fm
 from pathlib import Path
 import streamlit as st
-import matplotlib.font_manager as fm
 
 font_path = Path(__file__).parent / "fonts" / "IPAexGothic.ttf"
+prop = fm.FontProperties(fname=str(font_path))
 
-st.write("フォントパス:", font_path)
-st.write("存在する？", font_path.exists())
+fig, ax = plt.subplots()
+ax.set_title("日本語テスト：二層分離温度", fontproperties=prop)
+ax.set_xlabel("油分比率 (wt%)", fontproperties=prop)
+ax.set_ylabel("温度 (℃)", fontproperties=prop)
 
-if font_path.exists():
-    prop = fm.FontProperties(fname=str(font_path))
-    st.write("FontProperties 作成成功")
-else:
-    st.error("IPAexGothic.ttf が見つかりません")
+st.pyplot(fig)
 
 # ===========================================================
 # フォント管理（同梱フォント前提）
