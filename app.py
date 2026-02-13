@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import io
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,27 +16,22 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 
 
 # ===========================================================
-# フォント解決（確実に日本語を出す）
+# フォント管理（同梱フォント前提）
 # ===========================================================
-def get_font_properties(ui_font):
-    fonts = {f.name: f.fname for f in fm.fontManager.ttflist}
+def load_font(font_ui: str):
+    """
+    UI選択名 → FontProperties
+    日本語は同梱フォントを必ず使用
+    """
+    base = Path(__file__).parent
 
-    # UI名 → 実体候補
-    mapping = {
-        "Meiryo": ["Meiryo", "IPAexGothic", "IPAGothic"],
-        "Times New Roman": ["Times New Roman", "Times"],
-    }
+    if font_ui == "日本語（IPAexGothic）":
+        font_path = base / "fonts" / "IPAexGothic.ttf"
+        if font_path.exists():
+            return fm.FontProperties(fname=str(font_path))
 
-    for name in mapping.get(ui_font, []):
-        if name in fonts:
-            return fm.FontProperties(fname=fonts[name])
-
-    # 最終保険
-    for fallback in ["IPAexGothic", "IPAGothic"]:
-        if fallback in fonts:
-            return fm.FontProperties(fname=fonts[fallback])
-
-    return None
+    # 英語 or フォールバック
+    return fm.FontProperties(family="Times New Roman")
 
 
 # ===========================================================
@@ -57,14 +53,13 @@ class Config:
 
 
 # ===========================================================
-# 近似処理（方式＋パラメータ対応）
+# 近似処理
 # ===========================================================
 def fit_predict_curve(x, y, cfg):
     if len(x) < 2:
         return None, None
 
     xl = np.linspace(x.min(), x.max(), 200)
-
     m = cfg.FIT_METHOD
     p = cfg.FIT_PARAMS
 
@@ -79,9 +74,7 @@ def fit_predict_curve(x, y, cfg):
 
     if m == "savgol":
         idx = np.argsort(x)
-        return np.sort(x), savgol_filter(
-            y[idx], p["window"], p["poly"]
-        )
+        return np.sort(x), savgol_filter(y[idx], p["window"], p["poly"])
 
     if m == "loess":
         out = lowess(y, x, frac=p["frac"])
@@ -91,7 +84,7 @@ def fit_predict_curve(x, y, cfg):
 
 
 # ===========================================================
-# サンプル描画
+# サンプル描画（元コード忠実）
 # ===========================================================
 def process_sample(ax, df, base_row, idx, cfg, legend_done):
     x = pd.to_numeric(df.iloc[base_row + 1], errors="coerce").to_numpy()
@@ -135,12 +128,22 @@ def process_sample(ax, df, base_row, idx, cfg, legend_done):
             if xl is not None:
                 ax.plot(xl, yl, color=color, lw=cfg.LINEWIDTH, zorder=2)
 
-        ax.scatter(x[upper], y[upper],
-                   s=cfg.MARKER_SIZE, marker=marker,
-                   color=color, clip_on=False, zorder=4)
-        ax.scatter(x[lower], y[lower],
-                   s=cfg.MARKER_SIZE, marker=marker,
-                   color=color, clip_on=False, zorder=4)
+        ax.scatter(
+            x[upper], y[upper],
+            s=cfg.MARKER_SIZE,
+            marker=marker,
+            color=color,
+            clip_on=False,
+            zorder=4,
+        )
+        ax.scatter(
+            x[lower], y[lower],
+            s=cfg.MARKER_SIZE,
+            marker=marker,
+            color=color,
+            clip_on=False,
+            zorder=4,
+        )
 
 
 # ===========================================================
@@ -164,9 +167,10 @@ def run_analysis(file, cfg):
     ax.tick_params(direction="in", which="both", length=6, width=1)
     ax.xaxis.set_major_locator(MultipleLocator(10))
     ax.yaxis.set_major_locator(MultipleLocator(10))
-    ax.grid(True, linestyle=":", linewidth=0.8)
 
+    ax.grid(True, linestyle=":", linewidth=0.8)
     ax.legend(prop=cfg.FONT)
+
     plt.tight_layout()
     return fig
 
@@ -174,36 +178,40 @@ def run_analysis(file, cfg):
 # ===========================================================
 # Streamlit UI
 # ===========================================================
-st.set_page_config(page_title="二層分離温度解析")
+st.set_page_config(page_title="二層分離温度解析", layout="centered")
 st.title("二層分離温度解析アプリ")
 
+# --- フォント ---
 font_ui = st.sidebar.selectbox(
     "フォント",
-    ["Meiryo", "Times New Roman"]
+    ["日本語（IPAexGothic）", "英語（Times New Roman）"]
 )
-font_prop = get_font_properties(font_ui)
+font_prop = load_font(font_ui)
 
+# --- 軸範囲 ---
 upper = st.sidebar.number_input("上限温度 (°C)", value=70.0)
 lower = st.sidebar.number_input("下限温度 (°C)", value=-50.0)
 
+# --- 近似方式 ---
 fit_method = st.sidebar.selectbox(
     "近似方式",
     ["akima", "pchip", "spline", "savgol", "loess"]
 )
 
-# --- 方式別パラメータ ---
+# --- パラメータ ---
 fit_params = {}
 if fit_method == "spline":
     fit_params["s"] = st.sidebar.number_input("Spline s", value=5.0)
 elif fit_method == "savgol":
-    fit_params["window"] = st.sidebar.number_input("Window", 5, 21, 7, step=2)
+    fit_params["window"] = st.sidebar.number_input("Window (odd)", 5, 31, 7, step=2)
     fit_params["poly"] = st.sidebar.number_input("Poly order", 1, 5, 2)
 elif fit_method == "loess":
     fit_params["frac"] = st.sidebar.slider("LOESS frac", 0.1, 0.8, 0.35)
-else:
-    fit_params = {}
 
-uploaded = st.file_uploader("Excelファイルをアップロード", type=["xlsx", "xlsm"])
+uploaded = st.file_uploader(
+    "Excelファイルをアップロード",
+    type=["xlsx", "xlsm"]
+)
 
 if uploaded:
     cfg = Config(upper, lower, font_prop, fit_method, fit_params)
@@ -216,7 +224,7 @@ if uploaded:
     buf.seek(0)
 
     st.download_button(
-        "PNGダウンロード",
+        "PNG画像をダウンロード",
         data=buf,
         file_name="two_layer_temperature.png",
         mime="image/png",
