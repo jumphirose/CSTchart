@@ -26,7 +26,7 @@ def load_font(font_ui: str):
     base = Path(__file__).parent
 
     if font_ui == "日本語（IPAexGothic）":
-        font_path = base / "fonts" / "IPAexGothic.ttf"
+        font_path = base / "fonts" / "ipaexg.ttf"
         if font_path.exists():
             return fm.FontProperties(fname=str(font_path))
 
