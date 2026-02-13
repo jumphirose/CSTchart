@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import io
 import re
-import logging
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -20,25 +20,19 @@ from sklearn.model_selection import KFold
 
 
 # ===========================================================
-# フォント設定（存在チェック付き）
+# フォントユーティリティ
 # ===========================================================
-def set_japanese_font(preferred="Meiryo"):
-    available = {f.name: f.fname for f in fm.fontManager.ttflist}
+def get_available_fonts():
+    return sorted({f.name for f in fm.fontManager.ttflist})
 
-    candidates = [
-        preferred,
-        "IPAexGothic",
-        "IPAGothic",
-        "Noto Sans CJK JP",
-    ]
 
-    for name in candidates:
-        if name in available:
-            plt.rcParams["font.family"] = name
-            plt.rcParams["axes.unicode_minus"] = False
-            return name
-
-    return None
+def apply_font(font_name):
+    fonts = get_available_fonts()
+    if font_name in fonts:
+        plt.rcParams["font.family"] = font_name
+    else:
+        plt.rcParams["font.family"] = "sans-serif"
+    plt.rcParams["axes.unicode_minus"] = False
 
 
 # ===========================================================
@@ -112,21 +106,21 @@ def fit_predict_curve(x, y, cfg):
 
 
 # ===========================================================
-# サンプル描画（端点・凡例制御対応）
+# サンプル描画（端点・凡例完全制御）
 # ===========================================================
 def process_sample(ax, df, base_row, idx, cfg):
     x = pd.to_numeric(df.iloc[base_row + 1], errors="coerce").to_numpy()
     y1 = pd.to_numeric(df.iloc[base_row + 2], errors="coerce").to_numpy()
     y2 = pd.to_numeric(df.iloc[base_row + 3], errors="coerce").to_numpy()
 
-    label = f"Sample{idx+1}"
+    label = f"Sample{idx + 1}"
+
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     markers = ["o", "s", "^", "D", "v", "P"]
-
     color = colors[idx % len(colors)]
     marker = markers[idx % len(markers)]
 
-    first = True
+    label_used = False
 
     for y in (y1, y2):
         main = (
@@ -145,16 +139,29 @@ def process_sample(ax, df, base_row, idx, cfg):
                 color=color,
                 marker=marker,
                 alpha=cfg.ALPHA_POINTS,
-                label=label if first else "_nolegend_",
+                label=label if not label_used else "_nolegend_",
+                zorder=3,
+                clip_on=False,
             )
+            label_used = True
+
             xl, yl = fit_predict_curve(x[main], y[main], cfg)
             if xl is not None:
-                ax.plot(xl, yl, color=color, lw=cfg.LINEWIDTH)
+                ax.plot(xl, yl, color=color, lw=cfg.LINEWIDTH, zorder=2)
 
-            first = False
-
-        ax.scatter(x[upper], y[upper], marker="^", color=color, s=cfg.MARKER_SIZE)
-        ax.scatter(x[lower], y[lower], marker="v", color=color, s=cfg.MARKER_SIZE)
+        # 端点（必ず最前面に描画）
+        ax.scatter(
+            x[upper], y[upper],
+            marker="^", color=color,
+            s=cfg.MARKER_SIZE,
+            zorder=5, clip_on=False,
+        )
+        ax.scatter(
+            x[lower], y[lower],
+            marker="v", color=color,
+            s=cfg.MARKER_SIZE,
+            zorder=5, clip_on=False,
+        )
 
 
 # ===========================================================
@@ -184,11 +191,17 @@ def run_analysis(file, cfg):
 # ===========================================================
 # Streamlit UI
 # ===========================================================
-st.set_page_config(page_title="二層分離温度解析")
+st.set_page_config(page_title="二層分離温度解析", layout="centered")
 st.title("二層分離温度解析アプリ")
 
-font_used = set_japanese_font("Meiryo")
-st.caption(f"使用フォント: {font_used or '日本語フォントなし'}")
+# フォント選択
+fonts = get_available_fonts()
+font = st.sidebar.selectbox(
+    "フォント選択（日本語対応）",
+    options=["Meiryo", "IPAexGothic", "IPAGothic", "Noto Sans CJK JP"] + fonts,
+    index=0,
+)
+apply_font(font)
 
 fit_method = st.sidebar.selectbox(
     "近似方法",
@@ -203,6 +216,19 @@ uploaded = st.file_uploader("Excelファイルをアップロード", type=["xls
 if uploaded:
     cfg = Config(fit_method, upper, lower)
     fig = run_analysis(uploaded, cfg)
+
     st.pyplot(fig)
+
+    # ダウンロード
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=300)
+    buf.seek(0)
+
+    st.download_button(
+        label="PNGとしてダウンロード",
+        data=buf,
+        file_name="result.png",
+        mime="image/png",
+    )
 else:
     st.info("Excelファイルをアップロードしてください")
