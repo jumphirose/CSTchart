@@ -9,26 +9,6 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import streamlit as st
 
-from matplotlib.ticker import MultipleLocator
-from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, UnivariateSpline
-from scipy.signal import savgol_filter
-from statsmodels.nonparametric.smoothers_lowess import lowess
-
-import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
-from pathlib import Path
-import streamlit as st
-
-font_path = Path(__file__).parent / "fonts" / "IPAexGothic.ttf"
-prop = fm.FontProperties(fname=str(font_path))
-
-fig, ax = plt.subplots()
-ax.set_title("日本語テスト：二層分離温度", fontproperties=prop)
-ax.set_xlabel("油分比率 (wt%)", fontproperties=prop)
-ax.set_ylabel("温度 (℃)", fontproperties=prop)
-
-st.pyplot(fig)
-
 # ===========================================================
 # フォント管理（同梱フォント前提）
 # ===========================================================
