@@ -114,8 +114,8 @@ def run_analysis(file, cfg):
     # --- 軸設定（元コードと一致） ---
     ax.set_xlim(0, 100)
     ax.set_ylim(cfg.LOWER, cfg.UPPER)
-    ax.set_xlabel("油分比率 (wt%)")
-    ax.set_ylabel("二層分離温度 (°C)")
+    ax.set_xlabel("Oil content(wt%)")
+    ax.set_ylabel("Temperature(°C)")
 
     ax.tick_params(direction="in", which="both", length=6, width=1)
     ax.xaxis.set_major_locator(MultipleLocator(10))
