@@ -2,165 +2,97 @@
 # -*- coding: utf-8 -*-
 
 import io
-import re
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
 import streamlit as st
 
 from matplotlib.ticker import MultipleLocator
-from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, UnivariateSpline
-from scipy.signal import savgol_filter
-from statsmodels.nonparametric.smoothers_lowess import lowess
-from sklearn.preprocessing import PolynomialFeatures, StandardScaler
-from sklearn.linear_model import RidgeCV, HuberRegressor
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import KFold
-
-
-# ===========================================================
-# フォントユーティリティ
-# ===========================================================
-def get_available_fonts():
-    return sorted({f.name for f in fm.fontManager.ttflist})
-
-
-def apply_font(font_name):
-    fonts = get_available_fonts()
-    if font_name in fonts:
-        plt.rcParams["font.family"] = font_name
-    else:
-        plt.rcParams["font.family"] = "sans-serif"
-    plt.rcParams["axes.unicode_minus"] = False
+from scipy.interpolate import Akima1DInterpolator
 
 
 # ===========================================================
 # Config
 # ===========================================================
 class Config:
-    def __init__(self, fit_method, upper, lower):
-        self.FIT_METHOD = fit_method
-        self.ENDPOINT_UPPER = upper
-        self.ENDPOINT_LOWER = lower
-        self.ENDPOINT_ATOL = 1e-9
+    def __init__(self, upper, lower, font):
+        self.UPPER = upper
+        self.LOWER = lower
+        self.FONT = font
 
         self.FIGSIZE = (5, 5)
-        self.LIMS = dict(x=(0, 100), y=(lower, upper))
-        self.LABELS = dict(x="油分比率 (wt%)", y="二層分離温度 (°C)")
-        self.FONT_SIZE = dict(label=14, ticks=12, legend=12)
-
         self.MARKER_SIZE = 60
-        self.ALPHA_POINTS = 0.9
+        self.ALPHA = 0.9
         self.LINEWIDTH = 2.0
-
-        self.SPLINE_S_FACTOR = 5
-        self.LOESS_FRAC = 0.35
-        self.LOESS_IT = 1
-        self.RIDGE_DEGREE = 4
-        self.RIDGE_ALPHAS = np.logspace(-4, 4, 17)
-        self.SAVGOL_WINDOW = 7
-        self.SAVGOL_POLY = 2
-        self.ROBUST_DEGREE = 3
-        self.HUBER_EPSILON = 1.35
-        self.HUBER_ALPHA = 1e-4
+        self.ATOL = 1e-9
 
 
 # ===========================================================
-# フィッティング
+# サンプル描画（元スクリプト忠実再現）
 # ===========================================================
-def fit_predict_curve(x, y, cfg):
-    if len(x) < 2:
-        return None, None
-
-    xl = np.linspace(np.min(x), np.max(x), 200)
-
-    if cfg.FIT_METHOD == "akima":
-        return xl, Akima1DInterpolator(x, y)(xl)
-    if cfg.FIT_METHOD == "pchip":
-        return xl, PchipInterpolator(x, y)(xl)
-    if cfg.FIT_METHOD == "spline" and len(x) > 3:
-        return xl, UnivariateSpline(x, y, s=cfg.SPLINE_S_FACTOR)(xl)
-    if cfg.FIT_METHOD == "loess":
-        out = lowess(y, x, frac=cfg.LOESS_FRAC, it=cfg.LOESS_IT)
-        return out[:, 0], out[:, 1]
-    if cfg.FIT_METHOD == "ridge":
-        model = Pipeline([
-            ("poly", PolynomialFeatures(cfg.RIDGE_DEGREE)),
-            ("scaler", StandardScaler()),
-            ("ridge", RidgeCV(cfg.RIDGE_ALPHAS, cv=KFold(5))),
-        ])
-        model.fit(x[:, None], y)
-        return xl, model.predict(xl[:, None])
-    if cfg.FIT_METHOD == "savgol":
-        idx = np.argsort(x)
-        return np.sort(x), savgol_filter(y[idx], cfg.SAVGOL_WINDOW, cfg.SAVGOL_POLY)
-    if cfg.FIT_METHOD == "robust":
-        poly = PolynomialFeatures(cfg.ROBUST_DEGREE)
-        X = poly.fit_transform(x[:, None])
-        huber = HuberRegressor(epsilon=cfg.HUBER_EPSILON, alpha=cfg.HUBER_ALPHA)
-        huber.fit(X, y)
-        return xl, huber.predict(poly.transform(xl[:, None]))
-
-    return None, None
-
-
-# ===========================================================
-# サンプル描画（端点・凡例完全制御）
-# ===========================================================
-def process_sample(ax, df, base_row, idx, cfg):
+def process_sample(ax, df, base_row, idx, cfg, legend_done):
     x = pd.to_numeric(df.iloc[base_row + 1], errors="coerce").to_numpy()
     y1 = pd.to_numeric(df.iloc[base_row + 2], errors="coerce").to_numpy()
     y2 = pd.to_numeric(df.iloc[base_row + 3], errors="coerce").to_numpy()
 
-    label = f"Sample{idx + 1}"
+    # --- サンプル名（Excel由来） ---
+    label = (
+        str(df.iloc[base_row, 9])
+        if df.shape[1] > 9 and not pd.isna(df.iloc[base_row, 9])
+        else f"Sample{idx+1}"
+    )
 
     colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
     markers = ["o", "s", "^", "D", "v", "P"]
+
     color = colors[idx % len(colors)]
     marker = markers[idx % len(markers)]
-
-    label_used = False
 
     for y in (y1, y2):
         main = (
             np.isfinite(y)
-            & (~np.isclose(y, cfg.ENDPOINT_UPPER, atol=cfg.ENDPOINT_ATOL))
-            & (~np.isclose(y, cfg.ENDPOINT_LOWER, atol=cfg.ENDPOINT_ATOL))
+            & (~np.isclose(y, cfg.UPPER, atol=cfg.ATOL))
+            & (~np.isclose(y, cfg.LOWER, atol=cfg.ATOL))
         )
 
-        upper = np.isclose(y, cfg.ENDPOINT_UPPER, atol=cfg.ENDPOINT_ATOL)
-        lower = np.isclose(y, cfg.ENDPOINT_LOWER, atol=cfg.ENDPOINT_ATOL)
+        upper = np.isclose(y, cfg.UPPER, atol=cfg.ATOL)
+        lower = np.isclose(y, cfg.LOWER, atol=cfg.ATOL)
 
+        # --- 通常点（凡例は1回のみ） ---
         if np.any(main):
             ax.scatter(
                 x[main], y[main],
                 s=cfg.MARKER_SIZE,
-                color=color,
                 marker=marker,
-                alpha=cfg.ALPHA_POINTS,
-                label=label if not label_used else "_nolegend_",
-                zorder=3,
+                color=color,
+                alpha=cfg.ALPHA,
+                label=label if label not in legend_done else "_nolegend_",
                 clip_on=False,
+                zorder=3,
             )
-            label_used = True
+            legend_done.add(label)
 
-            xl, yl = fit_predict_curve(x[main], y[main], cfg)
-            if xl is not None:
-                ax.plot(xl, yl, color=color, lw=cfg.LINEWIDTH, zorder=2)
+            # 近似（端点除外）
+            xl = np.linspace(x[main].min(), x[main].max(), 200)
+            yl = Akima1DInterpolator(x[main], y[main])(xl)
+            ax.plot(xl, yl, color=color, lw=cfg.LINEWIDTH, zorder=2)
 
-        # 端点（必ず最前面に描画）
+        # --- 上限・下限点（同色・同マーカー） ---
         ax.scatter(
             x[upper], y[upper],
-            marker="^", color=color,
             s=cfg.MARKER_SIZE,
-            zorder=5, clip_on=False,
+            marker=marker,
+            color=color,
+            clip_on=False,
+            zorder=4,
         )
         ax.scatter(
             x[lower], y[lower],
-            marker="v", color=color,
             s=cfg.MARKER_SIZE,
-            zorder=5, clip_on=False,
+            marker=marker,
+            color=color,
+            clip_on=False,
+            zorder=4,
         )
 
 
@@ -168,66 +100,70 @@ def process_sample(ax, df, base_row, idx, cfg):
 # メイン解析
 # ===========================================================
 def run_analysis(file, cfg):
+    plt.rcParams["font.family"] = cfg.FONT
+    plt.rcParams["axes.unicode_minus"] = False
+
     df = pd.read_excel(file, header=None)
     fig, ax = plt.subplots(figsize=cfg.FIGSIZE)
 
+    legend_done = set()
+
     for i, r in enumerate(range(1, len(df), 4)):
-        process_sample(ax, df, r, i, cfg)
+        process_sample(ax, df, r, i, cfg, legend_done)
 
-    ax.set_xlim(*cfg.LIMS["x"])
-    ax.set_ylim(*cfg.LIMS["y"])
-    ax.set_xlabel(cfg.LABELS["x"], fontsize=cfg.FONT_SIZE["label"])
-    ax.set_ylabel(cfg.LABELS["y"], fontsize=cfg.FONT_SIZE["label"])
+    # --- 軸設定（元コードと一致） ---
+    ax.set_xlim(0, 100)
+    ax.set_ylim(cfg.LOWER, cfg.UPPER)
+    ax.set_xlabel("油分比率 (wt%)")
+    ax.set_ylabel("二層分離温度 (°C)")
 
+    ax.tick_params(direction="in", which="both", length=6, width=1)
     ax.xaxis.set_major_locator(MultipleLocator(10))
     ax.yaxis.set_major_locator(MultipleLocator(10))
-    ax.grid(True, linestyle=":")
 
-    ax.legend(fontsize=cfg.FONT_SIZE["legend"])
+    ax.grid(True, linestyle=":", linewidth=0.8)
+    ax.legend()
     plt.tight_layout()
+
     return fig
 
 
 # ===========================================================
 # Streamlit UI
 # ===========================================================
-st.set_page_config(page_title="二層分離温度解析", layout="centered")
+st.set_page_config(page_title="二層分離温度解析")
 st.title("二層分離温度解析アプリ")
 
-# フォント選択
-fonts = get_available_fonts()
+# --- フォント選択 ---
 font = st.sidebar.selectbox(
-    "フォント選択（日本語対応）",
-    options=["Meiryo", "IPAexGothic", "IPAGothic", "Noto Sans CJK JP"] + fonts,
-    index=0,
-)
-apply_font(font)
-
-fit_method = st.sidebar.selectbox(
-    "近似方法",
-    ["akima", "pchip", "spline", "loess", "ridge", "savgol", "robust"]
+    "フォント",
+    ["Meiryo", "Times New Roman"]
 )
 
-upper = st.sidebar.slider("上限温度 (°C)", -100, 150, 70)
-lower = st.sidebar.slider("下限温度 (°C)", -150, 100, -50)
+# --- 上下限（数値入力） ---
+upper = st.sidebar.number_input("上限温度 (°C)", value=70.0)
+lower = st.sidebar.number_input("下限温度 (°C)", value=-50.0)
 
-uploaded = st.file_uploader("Excelファイルをアップロード", type=["xlsx", "xlsm"])
+uploaded = st.file_uploader(
+    "Excelファイルをアップロード",
+    type=["xlsx", "xlsm"]
+)
 
 if uploaded:
-    cfg = Config(fit_method, upper, lower)
+    cfg = Config(upper, lower, font)
     fig = run_analysis(uploaded, cfg)
 
     st.pyplot(fig)
 
-    # ダウンロード
+    # --- PNGダウンロード ---
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=300)
     buf.seek(0)
 
     st.download_button(
-        label="PNGとしてダウンロード",
+        label="PNG画像をダウンロード",
         data=buf,
-        file_name="result.png",
+        file_name="two_layer_temperature.png",
         mime="image/png",
     )
 else:
