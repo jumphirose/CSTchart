@@ -9,6 +9,12 @@ import matplotlib.pyplot as plt
 import matplotlib.font_manager as fm
 import streamlit as st
 
+from matplotlib.ticker import MultipleLocator
+from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, UnivariateSpline
+from scipy.signal import savgol_filter
+from statsmodels.nonparametric.smoothers_lowess import lowess
+
+
 # ===========================================================
 # フォント管理（同梱フォント前提）
 # ===========================================================
