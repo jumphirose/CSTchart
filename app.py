@@ -14,6 +14,20 @@ from scipy.interpolate import Akima1DInterpolator, PchipInterpolator, Univariate
 from scipy.signal import savgol_filter
 from statsmodels.nonparametric.smoothers_lowess import lowess
 
+from pathlib import Path
+import streamlit as st
+import matplotlib.font_manager as fm
+
+font_path = Path(__file__).parent / "fonts" / "IPAexGothic.ttf"
+
+st.write("フォントパス:", font_path)
+st.write("存在する？", font_path.exists())
+
+if font_path.exists():
+    prop = fm.FontProperties(fname=str(font_path))
+    st.write("FontProperties 作成成功")
+else:
+    st.error("IPAexGothic.ttf が見つかりません")
 
 # ===========================================================
 # フォント管理（同梱フォント前提）
