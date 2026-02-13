@@ -1,5 +1,0 @@
-mkdir fonts
-cp IPAexGothic.ttf fonts/
-git add fonts/IPAexGothic.ttf
-git commit -m "Add IPAexGothic font"
-git push
