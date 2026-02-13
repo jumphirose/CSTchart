@@ -20,19 +20,23 @@ from statsmodels.nonparametric.smoothers_lowess import lowess
 # ===========================================================
 def load_font(font_ui: str):
     """
-    UI選択名 → FontProperties
-    日本語は同梱フォントを必ず使用
+    UIで選択されたフォント名から FontProperties を返す
+    フォントはすべて同梱ファイルを直接参照する
     """
     base = Path(__file__).parent
 
-    if font_ui == "日本語（IPAexGothic）":
-        font_path = base / "fonts" / "ipaexg.ttf"
-        if font_path.exists():
-            return fm.FontProperties(fname=str(font_path))
+    font_map = {
+        "日本語（IPAexGothic）": base / "fonts" / "ipaexg.ttf",
+        "英語（Times）": base / "fonts" / "NimbusRomNo9L-Reg.otf",
+    }
 
-    # 英語 or フォールバック
-    return fm.FontProperties(family="Times New Roman")
+    font_path = font_map.get(font_ui)
 
+    if font_path is not None and font_path.exists():
+        return fm.FontProperties(fname=str(font_path))
+
+    # 最終フォールバック（まず来ない）
+    return fm.FontProperties(family="DejaVu Sans")
 
 # ===========================================================
 # Config
